@@ -2,16 +2,36 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>hello wasm-pack!</title>
+    <title>webgl!</title>
     <link rel="stylesheet" href="./main.css">
   </head>
   <body>
     <noscript>this page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
 
-    <canvas id="noise-map-canvas"></canvas>
+    <canvas id="c"></canvas>
     <div id="container">
       <div id="controls"></div>
       <div id="colors"></div>
+    <script id="v-shader" type="notjs">
+      attribute vec4 a_position;
+      uniform mat4 u_transform;
+      varying float v_height;
+
+      void main() {
+        vec4 clip_position = u_transform * a_positon;
+        v_height = clip_position.z * 0.5 + 0.5;
+        gl_Position = clip_position;
+      }
+    </script>
+    <script id="f-shader" type="notjs">
+      precision mediump float;
+
+      varying float v_height;
+
+      void main() {
+        gl_FragColor = (v_height, v_height, v_height, 1);
+      }
+    </script>
     <script src="./bootstrap.js"></script>
   </body>
 </html>

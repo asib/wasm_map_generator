@@ -1,5 +1,5 @@
 import { memory } from "wasm-map-generator/wasm_map_generator_bg";
-import { NoiseMap } from "wasm-map-generator";
+import { m4, NoiseMap } from "wasm-map-generator";
 import * as dat from 'dat.gui';
 
 const lerp = (x, y, a) => x * (1 - a) + y * a
@@ -53,6 +53,35 @@ colors.forEach((elevationColor, idx) => {
   colorControllers.push(colorsGui.add(elevationColor, 'height'));
 });
 
+function createShader(gl, type, source) {
+  var shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+  if (success) {
+    return shader;
+  }
+
+  console.log(gl.getShaderInfoLog(shader));
+  gl.deleteShader(shader);
+}
+
+function createProgram(gl, vertexShader, fragmentShader) {
+  var program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+  if (success) {
+    return program;
+  }
+
+  console.log(gl.getProgramInfoLog(program));
+  gl.deleteProgram(program);
+}
+
+
+
 const regenMap = () => {
   const map = NoiseMap.new(widthControl.getValue(),
     heightControl.getValue(),
@@ -68,10 +97,28 @@ const regenMap = () => {
   const minNoiseVal = map.min_value();
   const noise = new Float64Array(memory.buffer, map.noise_map(), width * height);
 
-  const canvas = document.getElementById("noise-map-canvas");
+  const canvas = document.getElementById("c");
   canvas.width = width*CELL_SIZE;
   canvas.height = height*CELL_SIZE;
-  const ctx = canvas.getContext('2d');
+  const gl = canvas.getContext('webgl');
+  if (!gl) {
+    console.log("failed to init webgl");
+    return;
+  }
+
+  // Get the strings for our GLSL shaders
+  var vertexShaderSource = document.getElementById("v-shader").text;
+  var fragmentShaderSource = document.getElementById("f-shader").text;
+
+  // create GLSL shaders, upload the GLSL source, compile the shaders
+  var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  // Link the two shaders into a program
+  var program = createProgram(gl, vertexShader, fragmentShader);
+
+  var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+  var positionBuffer = gl.createBuffer();
 
   // returns (row, col)
   const getCoord = (idx) => {
