@@ -1,4 +1,4 @@
-export class m4 = {
+export class m4 {
   static translation(tx, ty, tz) {
     return [
        1,  0,  0,  0,
@@ -6,7 +6,7 @@ export class m4 = {
        0,  0,  1,  0,
        tx, ty, tz, 1,
     ];
-  },
+  }
 
   static xRotation(angleInRadians) {
     var c = Math.cos(angleInRadians);
@@ -18,7 +18,7 @@ export class m4 = {
       0, -s, c, 0,
       0, 0, 0, 1,
     ];
-  },
+  }
 
   static yRotation(angleInRadians) {
     var c = Math.cos(angleInRadians);
@@ -30,7 +30,7 @@ export class m4 = {
       s, 0, c, 0,
       0, 0, 0, 1,
     ];
-  },
+  }
 
   static zRotation(angleInRadians) {
     var c = Math.cos(angleInRadians);
@@ -42,7 +42,7 @@ export class m4 = {
        0, 0, 1, 0,
        0, 0, 0, 1,
     ];
-  },
+  }
 
   static scaling(sx, sy, sz) {
     return [
@@ -51,29 +51,30 @@ export class m4 = {
       0,  0, sz,  0,
       0,  0,  0,  1,
     ];
-  },
+  }
 
   static translate(m, tx, ty, tz) {
     return m4.multiply(m, m4.translation(tx, ty, tz));
-  },
+  }
 
   static xRotate(m, angleInRadians) {
     return m4.multiply(m, m4.xRotation(angleInRadians));
-  },
+  }
 
   static yRotate(m, angleInRadians) {
     return m4.multiply(m, m4.yRotation(angleInRadians));
-  },
+  }
 
   static zRotate(m, angleInRadians) {
     return m4.multiply(m, m4.zRotation(angleInRadians));
-  },
+  }
 
   static scale(m, sx, sy, sz) {
     return m4.multiply(m, m4.scaling(sx, sy, sz));
-  },
+  }
 
   static multiply(a, b) {
+    var dst = new Array(16);
     var b00 = b[0 * 4 + 0];
     var b01 = b[0 * 4 + 1];
     var b02 = b[0 * 4 + 2];
@@ -123,7 +124,7 @@ export class m4 = {
     dst[14] = b30 * a02 + b31 * a12 + b32 * a22 + b33 * a32;
     dst[15] = b30 * a03 + b31 * a13 + b32 * a23 + b33 * a33;
     return dst;
-  },
+  }
 
   static projection(width, height, depth) {
     // Note: This matrix flips the Y axis so 0 is at the top.
@@ -132,6 +133,18 @@ export class m4 = {
        0, -2 / height, 0, 0,
        0, 0, 2 / depth, 0,
       -1, 1, 0, 1,
+    ];
+  }
+
+  static perspective(fieldOfViewInRadians, aspect, near, far) {
+    var f = Math.tan(Math.PI * 0.5 - 0.5 * fieldOfViewInRadians);
+    var rangeInv = 1.0 / (near - far);
+ 
+    return [
+      f / aspect, 0, 0, 0,
+      0, f, 0, 0,
+      0, 0, (near + far) * rangeInv, -1,
+      0, 0, near * far * rangeInv * 2, 0
     ];
   }
 }

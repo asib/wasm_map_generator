@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "dat.gui": "^0.7.6",
-    "wasm-map-generator": "file:../pkg"
+    "wasm-map-generator": "file:../pkg",
+    "webgl-utils": "^1.0.1"
   }
 }

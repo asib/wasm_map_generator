@@ -14,12 +14,12 @@
       <div id="colors"></div>
     <script id="v-shader" type="notjs">
       attribute vec4 a_position;
-      uniform mat4 u_transform;
+      uniform mat4 u_worldview;
       varying float v_height;
 
       void main() {
-        vec4 clip_position = u_transform * a_positon;
-        v_height = clip_position.z * 0.5 + 0.5;
+        vec4 clip_position = u_worldview * a_position;
+        v_height = a_position.z;
         gl_Position = clip_position;
       }
     </script>
@@ -29,7 +29,19 @@
       varying float v_height;
 
       void main() {
-        gl_FragColor = (v_height, v_height, v_height, 1);
+        float h = v_height;
+
+        if (v_height < 4.0) {
+          gl_FragColor = vec4(0.0/255.0,79.0/255.0,163.0/255.0, 1);
+        } else if (v_height < 10.0) {
+          gl_FragColor = vec4(66.0/255.0,135.0/255.0,245.0/255.0, 1);
+        } else if (v_height < 90.0) {
+          gl_FragColor = vec4(34.0/255.0,201.0/255.0,101.0/255.0, 1);
+        } else if (v_height < 130.0) {
+          gl_FragColor = vec4(105.0/255.0,55.0/255.0,6.0/255.0, 1);
+        } else if (v_height < 150.0) {
+          gl_FragColor = vec4(74.0/255.0,37.0/255.0,1.0/255.0, 1);
+        }
       }
     </script>
     <script src="./bootstrap.js"></script>

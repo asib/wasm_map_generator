@@ -21,7 +21,8 @@ pub struct NoiseMap {
     persistence: f64,
     max_value: f64,
     min_value: f64,
-    map: Vec<f64>
+    map: Vec<f64>,
+    vertices: Vec<f32>,
 }
 
 fn euclidean_distance(p1: (f64, f64), p2: (f64, f64)) -> f64 {
@@ -85,9 +86,9 @@ impl NoiseMap {
 
                 row.push(noise_val);
 
-                if (noise_val > max_value) {
+                if noise_val > max_value {
                     max_value = noise_val;
-                } else if (noise_val < min_value) {
+                } else if noise_val < min_value {
                     min_value = noise_val;
                 }
             }
@@ -104,8 +105,43 @@ impl NoiseMap {
             persistence,
             max_value,
             min_value,
-            map: noise_map.concat() // flatten the 2D into a 1D for WASM interop.
+            map: noise_map.concat(), // flatten the 2D into a 1D for WASM interop.
+            // 2 triangles per vertex, 3 points per triangle, 3 floats per point,
+            // gives factor of 18
+            vertices: Vec::with_capacity(18 * (width-1) * (height-1)),
         }
+    }
+
+    pub fn gen_vertices(&mut self) {
+        for x in 0..self.width-1 {
+            for y in 0..self.height-1 {
+                let fx = x as f32;
+                let fy = y as f32;
+                let ix = self.get_index(x, y);
+
+                let scale = 200.0;
+
+                let scale_lerp = |x, y| {
+                    lerp(0.0, scale, invlerp(self.min_value, self.max_value,
+                            self.map[self.get_index(x, y)])) as f32
+                };
+
+                let current = [fx, fy, scale_lerp(x, y)];
+                let east = [fx+1.0, fy, scale_lerp(x+1, y)];
+                let south = [fx, fy+1.0, scale_lerp(x, y+1)];
+                let southeast = [fx+1.0, fy+1.0, scale_lerp(x+1, y+1)];
+
+                self.vertices.extend_from_slice(&([current, east, south, south, east, southeast]).concat());
+            }
+        }
+    }
+
+    fn get_coord(&self, ix: usize) -> (usize, usize) {
+        (ix / self.width, ix % self.width)
+    }
+
+    fn get_index(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
     }
 
     pub fn width(&self) -> usize { self.width }
@@ -115,6 +151,7 @@ impl NoiseMap {
     pub fn lacunarity(&self) -> f64 { self.lacunarity }
     pub fn persistence(&self) -> f64 { self.persistence }
     pub fn noise_map(&self) -> *const f64 { self.map.as_ptr() }
+    pub fn vertices(&self) -> *const f32 { self.vertices.as_ptr() }
     pub fn max_value(&self) -> f64 { self.max_value }
     pub fn min_value(&self) -> f64 { self.min_value }
 }

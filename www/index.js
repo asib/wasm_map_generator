@@ -1,5 +1,7 @@
 import { memory } from "wasm-map-generator/wasm_map_generator_bg";
-import { m4, NoiseMap } from "wasm-map-generator";
+import { NoiseMap } from "wasm-map-generator";
+import { m4 } from "./m4";
+import * as webglUtils from "./webgl-utils";
 import * as dat from 'dat.gui';
 
 const lerp = (x, y, a) => x * (1 - a) + y * a
@@ -117,6 +119,18 @@ const regenMap = () => {
   // Link the two shaders into a program
   var program = createProgram(gl, vertexShader, fragmentShader);
 
+  gl.useProgram(program);
+
+  var transformLocation = gl.getUniformLocation(program, "u_worldview");
+  var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+  var zNear = 1;
+  var zFar = 2000;
+  var transform = m4.perspective(1.0, aspect, zNear, zFar);
+  transform = m4.translate(transform, -350, -50, -850);
+  transform = m4.xRotate(transform, -1.0);
+  transform = m4.zRotate(transform, -1.2);
+  gl.uniformMatrix4fv(transformLocation, false, transform);
+
   var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
   var positionBuffer = gl.createBuffer();
 
@@ -125,22 +139,53 @@ const regenMap = () => {
     return [Math.floor(idx / width), idx % width];
   };
 
-  const render = () => {
-    noise.forEach((noiseValue, idx) => {
-      const [y, x] = getCoord(idx);
+  const getIndex = (x, y) => {
+    return (y * width + x);
+  };
 
-      const amount = invlerp(minNoiseVal, maxNoiseVal, noiseValue);
-      if (grayscaleControl.getValue() == true) {
-        const grayScale = lerp(0, 255, amount);
-        ctx.fillStyle = `rgb(${grayScale}, ${grayScale}, ${grayScale})`;
-      } else {
-        var cellColor = colors.slice().reverse()
-          .reduce((accum, next) => amount <= next.height ? next : accum);
-        var red = cellColor.color[0], green = cellColor.color[1], blue = cellColor.color[2];
-        ctx.fillStyle = `rgb(${red},${green},${blue})`;
-      }
-      ctx.fillRect(x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    });
+  const getVertices = () => {
+    map.gen_vertices();
+    const verts = new Float32Array(memory.buffer, map.vertices(), 18 * (width-1) * (height-1));
+    return verts;
+  };
+
+  const render = () => {
+    const vertices = getVertices();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+    webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+
+    // Tell WebGL how to convert from clip space to pixels
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    gl.enable(gl.CULL_FACE);
+    gl.enable(gl.DEPTH_TEST);
+
+    // Clear the canvas
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.enableVertexAttribArray(positionAttributeLocation);
+
+    // Bind the position buffer.
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+    // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
+    var size = 3;          // 3 components per iteration
+    var type = gl.FLOAT;   // the data is 32bit floats
+    var normalize = false; // don't normalize the data
+    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+    var offset = 0;        // start at the beginning of the buffer
+    gl.vertexAttribPointer(
+        positionAttributeLocation, size, type, normalize, stride, offset);
+
+    // draw
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6 * (width - 1) * (height - 1);
+    gl.drawArrays(primitiveType, offset, count);
   };
 
   render();
