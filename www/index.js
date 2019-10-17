@@ -33,28 +33,6 @@ const persistenceControl = gui.add(tmp, 'persistence').min(0).step(0.01);
 const grayscaleControl = gui.add(tmp, 'grayscale');
 const reshapeControl = gui.add(tmp, 'reshape');
 
-// For the color GUI
-var ElevationColor = function(color, height) {
-  this.color = color;
-  this.height = height;
-};
-
-var colors = [ new ElevationColor([0,79,163], 0.3)
-             , new ElevationColor([66,135,245], 0.4)
-             , new ElevationColor([34,201,101], 0.65)
-             , new ElevationColor([105,55,6], 0.73)
-             , new ElevationColor([74,37,1], 0.9)
-             , new ElevationColor([255,255,255], 1.0)
-             ];
-
-const colorControllers = [];
-const colorsGui = new dat.GUI({ autoPlace: false });
-document.getElementById("colors").appendChild(colorsGui.domElement);
-colors.forEach((elevationColor, idx) => {
-  colorControllers.push(colorsGui.addColor(elevationColor, 'color'));
-  colorControllers.push(colorsGui.add(elevationColor, 'height'));
-});
-
 function createShader(gl, type, source) {
   var shader = gl.createShader(type);
   gl.shaderSource(shader, source);
@@ -129,7 +107,6 @@ const regenMap = () => {
   transform = m4.translate(transform, -550, -50, -1450);
   transform = m4.xRotate(transform, -1.0);
   transform = m4.zRotate(transform, -1.2);
-  gl.uniformMatrix4fv(transformLocation, false, transform);
 
   var reverseLightDirectionLocation = gl.getUniformLocation(program, "u_reverseLightDirection");
   gl.uniform3fv(reverseLightDirectionLocation, m4.normalize([0.5, 0.7, 1]));
@@ -140,26 +117,45 @@ const regenMap = () => {
   var normalAttributeLocation = gl.getAttribLocation(program, "a_normal");
   var normalBuffer = gl.createBuffer();
 
-  // returns (row, col)
-  const getCoord = (idx) => {
-    return [Math.floor(idx / width), idx % width];
-  };
+  const vertices = map.vertices();
 
-  const getIndex = (x, y) => {
-    return (y * width + x);
-  };
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+  const normals = map.normals();
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+
+  gl.enableVertexAttribArray(positionAttributeLocation);
+
+  // Bind the position buffer.
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+  // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
+  var size = 3;          // 3 components per iteration
+  var type = gl.FLOAT;   // the data is 32bit floats
+  var normalize = false; // don't normalize the data
+  var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+  var offset = 0;        // start at the beginning of the buffer
+  gl.vertexAttribPointer(
+      positionAttributeLocation, size, type, normalize, stride, offset);
+
+  gl.enableVertexAttribArray(normalAttributeLocation);
+
+  // Bind the normal buffer.
+  gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+
+  // Tell the attribute how to get data out of normalBuffer (ARRAY_BUFFER)
+  var size = 3;          // 3 components per iteration
+  var type = gl.FLOAT;   // the data is 32bit floats
+  var normalize = false; // don't normalize the data
+  var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next normal
+  var offset = 0;        // start at the beginning of the buffer
+  gl.vertexAttribPointer(
+      normalAttributeLocation, size, type, normalize, stride, offset);
 
   const render = () => {
-    const vertices = map.vertices();
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-
-    const normals = map.normals();
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
-
     webglUtils.resizeCanvasToDisplaySize(gl.canvas);
 
     // Tell WebGL how to convert from clip space to pixels
@@ -168,37 +164,11 @@ const regenMap = () => {
     gl.enable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
 
+    gl.uniformMatrix4fv(transformLocation, false, transform);
+
     // Clear the canvas
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    gl.enableVertexAttribArray(positionAttributeLocation);
-
-    // Bind the position buffer.
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-
-    // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-    var size = 3;          // 3 components per iteration
-    var type = gl.FLOAT;   // the data is 32bit floats
-    var normalize = false; // don't normalize the data
-    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-    var offset = 0;        // start at the beginning of the buffer
-    gl.vertexAttribPointer(
-        positionAttributeLocation, size, type, normalize, stride, offset);
-
-    gl.enableVertexAttribArray(normalAttributeLocation);
-
-    // Bind the normal buffer.
-    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-
-    // Tell the attribute how to get data out of normalBuffer (ARRAY_BUFFER)
-    var size = 3;          // 3 components per iteration
-    var type = gl.FLOAT;   // the data is 32bit floats
-    var normalize = false; // don't normalize the data
-    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next normal
-    var offset = 0;        // start at the beginning of the buffer
-    gl.vertexAttribPointer(
-        normalAttributeLocation, size, type, normalize, stride, offset);
 
     // draw
     var primitiveType = gl.TRIANGLES;
@@ -208,6 +178,46 @@ const regenMap = () => {
   };
 
   render();
+
+  document.addEventListener('keydown', (e) => {
+    if(event.keyCode == 68) {
+      transform = m4.translate(transform, 10, 0, 0);
+    } else if(event.keyCode == 65) {
+      transform = m4.translate(transform, -10, 0, 0);
+    }
+
+    if(event.keyCode == 83) {
+      transform = m4.translate(transform, 0, -10, 0);
+    } else if(event.keyCode == 87) {
+      transform = m4.translate(transform, 0, 10, 0);
+    }
+
+    if (event.keyCode == 81) {
+      transform = m4.translate(transform, 0, 0, 10);
+    } else if (event.keyCode == 69) {
+      transform = m4.translate(transform, 0, 0, -10);
+    }
+
+    if (event.keyCode == 73) {
+      transform = m4.yRotate(transform, 0.1);
+    } else if (event.keyCode == 75) {
+      transform = m4.yRotate(transform, -0.1);
+    }
+
+    if (event.keyCode == 74) {
+      transform = m4.xRotate(transform, -0.1);
+    } else if (event.keyCode == 76) {
+      transform = m4.xRotate(transform, 0.1);
+    }
+
+    if (event.keyCode == 85) {
+      transform = m4.zRotate(transform, -0.1);
+    } else if (event.keyCode == 79) {
+      transform = m4.zRotate(transform, 0.1);
+    }
+
+    render();
+  }, false);
 }
 
 regenMap();

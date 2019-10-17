@@ -99,6 +99,7 @@ impl NoiseMap {
         // 2 triangles per vertex, 3 points per triangle gives factor of 6
         let mut vertices = Vec::with_capacity(6*(width-1)*(height-1));
         let mut normals = Vec::with_capacity(vertices.capacity());
+        let mut colors = Vec::with_capacity(vertices.capacity());
         for (y, row) in noise_map.slice((0, 0), (width-1, height-1)).row_iter().enumerate() {
             for (x, height) in row.iter().enumerate() {
                 let fx = x as f32;
