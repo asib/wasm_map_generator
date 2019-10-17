@@ -10,3 +10,8 @@ To run the Javascript frontend, enter the `www` directory and execute `npm run s
 
 ![](demo.png)
 ![](demo2.png)
+
+#### 3D
+
+![](3d_demo.png)
+![](3d_demo2.png)

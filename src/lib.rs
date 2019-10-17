@@ -1,6 +1,8 @@
 mod utils;
 
 use wasm_bindgen::prelude::*;
+use nalgebra as na;
+use nalgebra::{Matrix, DMatrix, Dynamic, VecStorage, Vector3};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -21,8 +23,9 @@ pub struct NoiseMap {
     persistence: f64,
     max_value: f64,
     min_value: f64,
-    map: Vec<f64>,
-    vertices: Vec<f32>,
+    map: Matrix<f64, Dynamic, Dynamic, VecStorage<f64, Dynamic, Dynamic>>,
+    vertices: Vec<Vector3<f32>>,
+    normals: Vec<Vector3<f32>>,
 }
 
 fn euclidean_distance(p1: (f64, f64), p2: (f64, f64)) -> f64 {
@@ -61,39 +64,66 @@ impl NoiseMap {
         let noise = Perlin::new();
         noise.set_seed(rand::random());
 
-        let mut noise_map = Vec::with_capacity(height);
         let mut max_value = std::f64::MIN;
         let mut min_value = std::f64::MAX;
 
-        for y in 0..height {
-            let mut row = Vec::with_capacity(width);
-            for x in 0..width {
-                let mut noise_val = 0_f64;
-                for octave_idx in 0..octaves {
-                    let octave_idx = octave_idx as i32;
-                    let sample_x = x as f64 / scale * lacunarity.powi(octave_idx);
-                    let sample_y = y as f64 / scale * lacunarity.powi(octave_idx);
-                    noise_val += noise.get([sample_x, sample_y]) * persistence.powi(octave_idx);
-                }
+        let noise_gen_fn = |y, x| {
+            let mut noise_val = 0.0;
 
-                if reshape {
-                    let distance_to_map_center = euclidean_distance((x as f64, y as f64),
-                      (center_x, center_y));
-                    let d = invlerp(0.0, max_distance_from_center, distance_to_map_center);
-                    let d = -lerp(-1.0, 1.0, d);
-                    noise_val = clamp(noise_val + d, 0.0, 1.0);
-                }
-
-                row.push(noise_val);
-
-                if noise_val > max_value {
-                    max_value = noise_val;
-                } else if noise_val < min_value {
-                    min_value = noise_val;
-                }
+            for octave_idx in 0..octaves {
+                let octave_idx = octave_idx as i32;
+                let sample_x = x as f64 / scale * lacunarity.powi(octave_idx);
+                let sample_y = y as f64 / scale * lacunarity.powi(octave_idx);
+                noise_val += noise.get([sample_x, sample_y]) * persistence.powi(octave_idx);
             }
 
-            noise_map.push(row);
+            if reshape {
+                let distance_to_map_center = euclidean_distance((x as f64, y as f64),
+                  (center_x, center_y));
+                let d = invlerp(0.0, max_distance_from_center, distance_to_map_center);
+                let d = -lerp(-1.0, 1.0, d);
+                noise_val = clamp(noise_val + d, 0.0, 1.0);
+            }
+
+            if noise_val > max_value {
+                max_value = noise_val;
+            } else if noise_val < min_value {
+                min_value = noise_val;
+            }
+
+            noise_val
+        };
+
+        let noise_map = DMatrix::from_fn(width, height, noise_gen_fn);
+
+        // 2 triangles per vertex, 3 points per triangle gives factor of 6
+        let mut vertices = Vec::with_capacity(6*(width-1)*(height-1));
+        let mut normals = Vec::with_capacity(vertices.capacity());
+        for (y, row) in noise_map.slice((0, 0), (width-1, height-1)).row_iter().enumerate() {
+            for (x, height) in row.iter().enumerate() {
+                let fx = x as f32;
+                let fy = y as f32;
+
+                let scale = 200.0;
+
+                let scale_lerp = |x, y| {
+                    lerp(0.0, scale, invlerp(min_value, max_value,
+                            noise_map[(x, y)])) as f32
+                };
+
+                let current = Vector3::new(fx, fy, scale_lerp(x, y));
+                let east = Vector3::new(fx+1.0, fy, scale_lerp(x+1, y));
+                let south = Vector3::new(fx, fy+1.0, scale_lerp(x, y+1));
+                let southeast = Vector3::new(fx+1.0, fy+1.0, scale_lerp(x+1, y+1));
+
+                vertices.extend_from_slice(&[current, east, south, south, east, southeast]);
+
+                // calculate normals for the two fragments
+                let norm1 = (east - south).cross(&(current - south));
+                let norm2 = (east - southeast).cross(&(south - southeast));
+
+                normals.extend_from_slice(&[norm1, norm1, norm1, norm2, norm2, norm2]);
+            }
         }
 
         NoiseMap {
@@ -103,36 +133,11 @@ impl NoiseMap {
             octaves,
             lacunarity,
             persistence,
-            max_value,
-            min_value,
-            map: noise_map.concat(), // flatten the 2D into a 1D for WASM interop.
-            // 2 triangles per vertex, 3 points per triangle, 3 floats per point,
-            // gives factor of 18
-            vertices: Vec::with_capacity(18 * (width-1) * (height-1)),
-        }
-    }
-
-    pub fn gen_vertices(&mut self) {
-        for x in 0..self.width-1 {
-            for y in 0..self.height-1 {
-                let fx = x as f32;
-                let fy = y as f32;
-                let ix = self.get_index(x, y);
-
-                let scale = 200.0;
-
-                let scale_lerp = |x, y| {
-                    lerp(0.0, scale, invlerp(self.min_value, self.max_value,
-                            self.map[self.get_index(x, y)])) as f32
-                };
-
-                let current = [fx, fy, scale_lerp(x, y)];
-                let east = [fx+1.0, fy, scale_lerp(x+1, y)];
-                let south = [fx, fy+1.0, scale_lerp(x, y+1)];
-                let southeast = [fx+1.0, fy+1.0, scale_lerp(x+1, y+1)];
-
-                self.vertices.extend_from_slice(&([current, east, south, south, east, southeast]).concat());
-            }
+            max_value: max_value,
+            min_value: min_value,
+            map: noise_map,
+            vertices,
+            normals,
         }
     }
 
@@ -150,10 +155,21 @@ impl NoiseMap {
     pub fn octaves(&self) -> u8 { self.octaves }
     pub fn lacunarity(&self) -> f64 { self.lacunarity }
     pub fn persistence(&self) -> f64 { self.persistence }
-    pub fn noise_map(&self) -> *const f64 { self.map.as_ptr() }
-    pub fn vertices(&self) -> *const f32 { self.vertices.as_ptr() }
+    pub fn noise_map(&self) -> *const f64 { self.map.as_slice().as_ptr() }
     pub fn max_value(&self) -> f64 { self.max_value }
     pub fn min_value(&self) -> f64 { self.min_value }
+    pub fn vertices(&self) -> Vec<f32> {
+        self.vertices
+            .iter()
+            .flat_map(|v| vec![v.x, v.y, v.z])
+            .collect::<Vec<f32>>()
+    }
+    pub fn normals(&self) -> Vec<f32> {
+        self.normals
+            .iter()
+            .flat_map(|v| vec![v.x, v.y, v.z])
+            .collect::<Vec<f32>>()
+    }
 }
 
 pub fn write_grid_to_file(grid: &[Vec<f64>], path: &str) -> std::io::Result<()> {

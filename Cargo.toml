@@ -16,6 +16,7 @@ noise = "0.6.0"
 image = "0.22.2"
 lerp = "0.2.0"
 rand = { version = "0.7.2", features = ["wasm-bindgen"] }
+nalgebra = "0.18.1"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

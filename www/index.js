@@ -11,14 +11,14 @@ const CELL_SIZE = 1;
 
 // Purely for constructing the GUI.
 var NoiseMapJS = function() {
-  this.width = 500;
-  this.height = 500;
-  this.scale = 180;
+  this.width = 1000;
+  this.height = 1000;
+  this.scale = 323;
   this.octaves = 6;
   this.lacunarity = 2;
   this.persistence = 0.5;
   this.grayscale = false;
-  this.reshape = true;
+  this.reshape = false;
 };
 
 const gui = new dat.GUI({ autoPlace: false });
@@ -126,13 +126,19 @@ const regenMap = () => {
   var zNear = 1;
   var zFar = 2000;
   var transform = m4.perspective(1.0, aspect, zNear, zFar);
-  transform = m4.translate(transform, -350, -50, -850);
+  transform = m4.translate(transform, -550, -50, -1450);
   transform = m4.xRotate(transform, -1.0);
   transform = m4.zRotate(transform, -1.2);
   gl.uniformMatrix4fv(transformLocation, false, transform);
 
+  var reverseLightDirectionLocation = gl.getUniformLocation(program, "u_reverseLightDirection");
+  gl.uniform3fv(reverseLightDirectionLocation, m4.normalize([0.5, 0.7, 1]));
+
   var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
   var positionBuffer = gl.createBuffer();
+
+  var normalAttributeLocation = gl.getAttribLocation(program, "a_normal");
+  var normalBuffer = gl.createBuffer();
 
   // returns (row, col)
   const getCoord = (idx) => {
@@ -143,17 +149,16 @@ const regenMap = () => {
     return (y * width + x);
   };
 
-  const getVertices = () => {
-    map.gen_vertices();
-    const verts = new Float32Array(memory.buffer, map.vertices(), 18 * (width-1) * (height-1));
-    return verts;
-  };
-
   const render = () => {
-    const vertices = getVertices();
+    const vertices = map.vertices();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+    const normals = map.normals();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
     webglUtils.resizeCanvasToDisplaySize(gl.canvas);
 
@@ -180,6 +185,20 @@ const regenMap = () => {
     var offset = 0;        // start at the beginning of the buffer
     gl.vertexAttribPointer(
         positionAttributeLocation, size, type, normalize, stride, offset);
+
+    gl.enableVertexAttribArray(normalAttributeLocation);
+
+    // Bind the normal buffer.
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+
+    // Tell the attribute how to get data out of normalBuffer (ARRAY_BUFFER)
+    var size = 3;          // 3 components per iteration
+    var type = gl.FLOAT;   // the data is 32bit floats
+    var normalize = false; // don't normalize the data
+    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next normal
+    var offset = 0;        // start at the beginning of the buffer
+    gl.vertexAttribPointer(
+        normalAttributeLocation, size, type, normalize, stride, offset);
 
     // draw
     var primitiveType = gl.TRIANGLES;

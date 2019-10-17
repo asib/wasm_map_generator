@@ -147,4 +147,16 @@ export class m4 {
       0, 0, near * far * rangeInv * 2, 0
     ];
   }
+
+  static normalize(v, dst) {
+    dst = dst || new Float32Array(3);
+    var length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    // make sure we don't divide by 0.
+    if (length > 0.00001) {
+      dst[0] = v[0] / length;
+      dst[1] = v[1] / length;
+      dst[2] = v[2] / length;
+    }
+    return dst;
+  }
 }
